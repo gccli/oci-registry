@@ -10,9 +10,6 @@ use compact_str::CompactString;
 use dkregistry::v2::Client;
 use futures::stream::StreamExt;
 use futures::stream::TryStreamExt;
-use once_cell::sync::Lazy;
-use prometheus::register_int_counter_vec;
-use prometheus::IntCounterVec;
 use serde::Deserialize;
 use tokio::sync::Mutex;
 use tracing::error;
@@ -88,10 +85,9 @@ fn manifest_response(manifest: Manifest) -> HttpResponse {
 }
 
 pub async fn manifest(req: web::Path<ManifestRequest>, qstr: web::Query<ManifestQueryString>, config: web::Data<RequestConfig>) -> Result<HttpResponse, Error> {
-	static HIT_COUNTER: Lazy<IntCounterVec> = Lazy::new(|| register_int_counter_vec!("manifest_cache_hits", "Number of manifests read from cache", &["namespace"]).unwrap());
-	static MISS_COUNTER: Lazy<IntCounterVec> = Lazy::new(|| register_int_counter_vec!("manifest_cache_misses", "Number of manifest requests that went to upstream", &["namespace"]).unwrap());
-
 	let (namespace, image) = split_image(qstr.ns.as_deref(), req.image.as_ref(), config.default_ns.as_ref());
+
+	println!("manifest ns:{} image:{}", namespace, image);
 
 	let max_age = config.upstream.lock().await.get(namespace)?.manifest_invalidation_time;
 	let storage_path = req.storage_path(namespace);
@@ -99,13 +95,11 @@ pub async fn manifest(req: web::Path<ManifestRequest>, qstr: web::Query<Manifest
 		Ok(stream) => {
 			let body = stream.into_inner().try_collect::<web::BytesMut>().await?;
 			let manifest = serde_json::from_slice(body.as_ref())?;
-			HIT_COUNTER.with_label_values(&[namespace]).inc();
 			return Ok(manifest_response(manifest));
 		},
 		Err(error) => warn!(path = req.http_path(), storage_path, %error, "Manifest not found in repository; pulling from upstream")
 	}
 
-	MISS_COUNTER.with_label_values(&[namespace]).inc();
 	let manifest = {
 		let mut upstream = config.upstream.lock().await.get(namespace)?.clone();
 		authenticate_with_upstream(&mut upstream.client, &format!("repository:{}:pull", image)).await?;
@@ -151,9 +145,6 @@ impl BlobRequest {
 }
 
 pub async fn blob(req: web::Path<BlobRequest>, qstr: web::Query<ManifestQueryString>, config: web::Data<RequestConfig>) -> Result<HttpResponse, Error> {
-	static HIT_COUNTER: Lazy<IntCounterVec> = Lazy::new(|| register_int_counter_vec!("blob_cache_hits", "Number of blobs read from cache", &["namespace"]).unwrap());
-	static MISS_COUNTER: Lazy<IntCounterVec> = Lazy::new(|| register_int_counter_vec!("blob_cache_misses", "Number of blob requests that went to upstream", &["namespace"]).unwrap());
-
 	let Some(wanted_digest_hex) = req.digest.strip_prefix("sha256:") else {
 		return Err(Error::InvalidDigest);
 	};
@@ -166,6 +157,7 @@ pub async fn blob(req: web::Path<BlobRequest>, qstr: web::Query<ManifestQueryStr
 	};
 
 	let (namespace, image) = split_image(qstr.ns.as_deref(), req.image.as_ref(), config.default_ns.as_ref());
+	println!("blob ns:{} image:{}", namespace, image);
 
 	let storage_path = req.storage_path();
 	let max_age = config.upstream.lock().await.get(namespace)?.blob_invalidation_time;
@@ -174,7 +166,6 @@ pub async fn blob(req: web::Path<BlobRequest>, qstr: web::Query<ManifestQueryStr
 			true => {
 				let hash = stream::hash(stream.into_inner()).await?;
 				if (hash == wanted_digest) {
-					HIT_COUNTER.with_label_values(&[namespace]).inc();
 					let stream = config.repo.read(storage_path.as_ref(), max_age).await?;
 					return Ok(HttpResponse::Ok().body(SizedStream::new(stream.length(), stream.into_inner())));
 				}
@@ -182,7 +173,6 @@ pub async fn blob(req: web::Path<BlobRequest>, qstr: web::Query<ManifestQueryStr
 				config.repo.delete(storage_path.as_ref()).await?;
 			},
 			false => {
-				HIT_COUNTER.with_label_values(&[namespace]).inc();
 				let stream = config.repo.read(storage_path.as_ref(), max_age).await?;
 				return Ok(HttpResponse::Ok().body(SizedStream::new(stream.length(), stream.into_inner())));
 			}
@@ -190,7 +180,6 @@ pub async fn blob(req: web::Path<BlobRequest>, qstr: web::Query<ManifestQueryStr
 		Err(error) => warn!(path = storage_path, %error, "Blob not found in repository; pulling from upstream")
 	};
 
-	MISS_COUNTER.with_label_values(&[namespace]).inc();
 	let response = {
 		let mut upstream = config.upstream.lock().await.get(namespace)?.clone();
 		authenticate_with_upstream(&mut upstream.client, &format!("repository:{}:pull", image)).await?;
@@ -321,6 +310,14 @@ mod tests {
 		let (ns, image) = split_image(None, "ghcr.io/buildbarn/bb-runner-installer", "");
 		assert_eq!(ns, "ghcr.io");
 		assert_eq!(image, "buildbarn/bb-runner-installer");
+
+		let (ns, image) = split_image(None, "regmirror.cspm.svc/trivy-db:2", "");
+		assert_eq!(ns, "");
+		assert_eq!(image, "regmirror.cspm.svc/trivy-db:2");
+
+		let (ns, image) = split_image(None, "10.58.144.4/lib/trivy-db:2", "");
+		assert_eq!(ns, "10.58.144.4");
+		assert_eq!(image, "lib/trivy-db:2");
 	}
 
 	#[test]

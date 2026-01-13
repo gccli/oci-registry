@@ -8,7 +8,6 @@ use actix_web::http::header::HeaderName;
 use actix_web::http::header::HeaderValue;
 use actix_web::web;
 use actix_web::HttpResponse;
-use actix_web_prometheus::PrometheusMetricsBuilder;
 use clap::Parser;
 use compact_str::CompactString;
 use futures::future::FutureExt;
@@ -32,7 +31,7 @@ struct Config {
 	/// An IP address and port combination to listen on a network socket, or a path prefixed with
 	/// "unix:" to listen on a Unix domain socket
 	#[clap(env, long, default_value = "0.0.0.0:80")]
-	listen: socket_address::Address,
+	listen: socket_address::ListenAddress,
 	#[clap(env, long, default_value = "docker.io")]
 	default_namespace: CompactString,
 	/// If enabled, will validate a blob's SHA256 digest when reading it from cache storage; if the
@@ -50,13 +49,6 @@ struct Config {
 #[inline]
 fn liveness() -> future::Ready<HttpResponse> {
 	future::ready(HttpResponse::Ok().body(""))
-}
-
-#[allow(dead_code)] // TODO:  Implement
-#[inline]
-async fn readiness() -> Result<&'static str, api::error::Error> {
-	// TODO:  Check upstream and storage
-	Ok("")
 }
 
 async fn cleanup(upstream: &InvalidationConfig, repo: &storage::Repository) {
@@ -107,13 +99,11 @@ async fn main() {
 		})
 	};
 
-	let prometheus = PrometheusMetricsBuilder::new("http").endpoint("/metrics").build().unwrap();
 	let per_request_config = web::Data::new(api::RequestConfig::new(repo, upstream, config.default_namespace, config.check_cache_digest));
 
 	let server = actix_web::HttpServer::new(move || {
 		actix_web::App::new()
 			.app_data(per_request_config.clone())
-			.wrap(prometheus.clone())
 			.service(
 				web::scope("/v2")
 					.wrap(actix_web::middleware::Logger::default())
@@ -146,8 +136,8 @@ async fn main() {
 			.route("/", web::get().to(liveness))
 	});
 	match config.listen {
-		socket_address::Address::Network(addr) => server.shutdown_timeout(10).bind(&addr).unwrap().run().await.unwrap(),
-		socket_address::Address::UnixSocket(path) => server.shutdown_timeout(10).bind_uds(&path).unwrap().run().await.unwrap()
+		socket_address::ListenAddress::Network(addr) => server.shutdown_timeout(10).bind(&addr).unwrap().run().await.unwrap(),
+		socket_address::ListenAddress::UnixSocket(path) => server.shutdown_timeout(10).bind_uds(&path).unwrap().run().await.unwrap()
 	};
 	shutdown_tx.send(()).unwrap();
 	background.await.unwrap();

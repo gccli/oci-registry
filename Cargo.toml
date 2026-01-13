@@ -22,7 +22,6 @@ harness = false
 
 [dependencies]
 actix-web = "4.2.1"
-actix-web-prometheus = { version = "0.1.2", features = ["process"] }
 arcerror = "0.1.5"
 arcstr = { version = "1.1.5", features = ["serde"] }
 async-broadcast = "0.7.0"
@@ -30,26 +29,26 @@ async-stream = "0.3.3"
 async-walkdir = "1.0.0"
 bytes = { version = "1.2.1", features = ["serde"] }
 camino = "1.1.1"
-clap = { version = "4.0.12", features = ["derive", "env"] }
+clap = { version = "4.5", features = ["derive", "env"] }
 compact_str = { version = "0.7.0", features = ["serde"] }
-dkregistry = { version = "0.5.1-alpha.0", git = "https://github.com/mcronce/dkregistry-rs.git", default-features = false, features = ["reqwest-rustls"] }
+dkregistry = { path = "crates/dkregistry-rs", default-features = false, features = ["reqwest-rustls"] }
 futures = "0.3.24"
 hex = "0.4.3"
 humantime = "2.1.0"
 lazy-regex = "3.0.0"
-once_cell = { version = "1.18.0", default-features = false, features = ["parking_lot"] }
+# once_cell = { version = "1.18.0", default-features = false, features = ["parking_lot"] }
 pin-project = "1.1.4"
-prometheus = { version = "0.13.3", default-features = false }
-regex = "1.6.0"
+regex = { version="1.12" }
 rusoto_core = { version = "0.48.0", default-features = false, features = ["hyper-rustls", "flate2"] }
-rusoto_credential = "0.48.0"
+rusoto_credential = { version = "0.48.0" }
 rusoto_s3 = { version = "0.48.0", default-features = false, features = ["rustls"] }
 serde = { version = "1.0.145", features = ["derive"] }
-serde_json = "1.0.86"
 serde_with = { version = "3.0.0", default-features = false, features = ["hex"] }
 serde_yaml = "0.9.13"
+serde_json = "1.0.86"
+
 sha2 = { version = "0.10.6", features = ["asm"] }
-socket-address = "0.1.0"
+socket-address = {version = "0.3"}
 thiserror = "1.0.37"
 tikv-jemallocator-global = { version = "0.5.0", features = ["tikv-jemallocator"] }
 time = { version = "0.3.15", features = ["parsing"] }
@@ -61,8 +60,12 @@ tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 criterion = "0.5.1"
 
 # TODO:  Once https://github.com/rusoto/rusoto/pull/1981 is merged, remove these.
-[patch.crates-io]
-rusoto_core = {git = "https://github.com/mcronce/rusoto.git", branch = "enable-http1"}
-rusoto_credential = {git = "https://github.com/mcronce/rusoto.git", branch = "enable-http1"}
-rusoto_s3 = {git = "https://github.com/mcronce/rusoto.git", branch = "enable-http1"}
+#[patch.crates-io]
+#rusoto_core = {git = "https://github.com/mcronce/rusoto.git", branch = "enable-http1"}
+#rusoto_credential = {git = "https://github.com/mcronce/rusoto.git", branch = "enable-http1"}
+#rusoto_s3 = {git = "https://github.com/mcronce/rusoto.git", branch = "enable-http1"}
 
+[workspace]
+members = [
+  "crates/dkregistry-rs",
+]
