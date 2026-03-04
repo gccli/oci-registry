@@ -1,0 +1,32 @@
+{
+  "name": "OCI Registry Dev Container",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-1-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "runArgs": ["--network=host"],
+  "build": {
+    "options": ["--network=host"]
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+        "serayuzgur.crates",
+        "tamasfe.even-better-toml",
+        "usernamehw.errorlens"
+      ],
+      "settings": {
+        "rust-analyzer.cargo.features": "all",
+        "rust-analyzer.checkOnSave.command": "clippy",
+        "editor.formatOnSave": true
+      }
+    }
+  },
+  "postCreateCommand": "rustup component add rustfmt clippy && cargo fetch",
+  "mounts": [
+    "source=${localEnv:HOME}/.cargo/registry,target=/usr/local/cargo/registry,type=bind,consistency=cached"
+  ],
+  "remoteUser": "root"
+}
