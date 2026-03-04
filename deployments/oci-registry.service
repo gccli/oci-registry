@@ -1,0 +1,13 @@
+[Unit]
+Description=OCI registry
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/oci-registry filesystem --root /data/registry
+Restart=always
+RestartSec=3
+EnvironmentFile=/etc/default/oci-registry
+
+[Install]
+WantedBy=multi-user.target
